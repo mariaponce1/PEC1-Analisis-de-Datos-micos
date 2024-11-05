@@ -1,0 +1,106 @@
+---
+title: "PEC 1 Análisis de Datos Ómicos"
+author: "María Ponce Renilla"
+date: "2024-10-28"
+output: html_document
+---
+
+```{r}
+# Selecciono la ruta del archivo cargado
+file_path <- "C:/Users/mponc/Downloads/DataValues_S013.csv"
+
+# Leo los datos
+data <- read.csv(file_path, row.names = 1)  
+head(data)  # veo las primeras filas y la estructura de los datos que he escogido
+```
+
+```{r}
+# Convierto 'SURGERY' y 'GENDER' a numérico
+data$SURGERY <- ifelse(data$SURGERY == "tubular", 0, 1)
+data$GENDER <- ifelse(data$GENDER == "M", 0, 1)
+
+# Separo los metadatos y la matriz de datos
+metadata <- data[, c("SURGERY", "GENDER")]  #Estos son los metadatos en formato numérico
+data_matrix <- data[, !(names(data) %in% c("SURGERY", "GENDER"))]  # Para excluir metadatos para la matriz
+
+# Tomo 'SUBJECTS' como identificador
+subjects <- data$SUBJECTS
+
+# Excluyo la columna 'SUBJECTS' de data_matrix para obtener solo las variables que corresponden
+data_matrix <- data[, !(names(data) %in% c("SUBJECTS"))]
+
+# Transponer data_matrix para que cada columna sea un sujeto (se ordena al revés cuando usas SummarizedExperiment)
+data_matrix <- t(data_matrix)
+
+# Asignar los nombres de las columnas en data_matrix como los identificadores de subjects
+colnames(data_matrix) <- subjects
+```
+
+```{r}
+# Crear un data frame de metadatos (aquí solo con 'SUBJECTS', pero puedes añadir más si las tienes)
+metadata <- data.frame(SUBJECTS = subjects)
+rownames(metadata) <- subjects
+```
+
+```{r}
+library(SummarizedExperiment)
+
+# Creo el objeto SummarizedExperiment con los datos correctamente organizados
+se <- SummarizedExperiment(assays = list(counts = as.matrix(data_matrix)),
+                           colData = metadata)
+
+# Guardo el objeto SummarizedExperiment en un archivo .Rda para poder subirlo después al repositorio
+save(se, file = "contenedor_datos_y_metadatos.Rda")
+```
+
+
+# Ahora que ya he creado el objeto SummerizedExperiment, analizo las diferentes estadísticas descriptivas básicas y análisis sobre los datos con los que estoy trabajando
+
+```{r}
+# Estadísticas descriptivas de las variables
+summary(assay(se))
+```
+```{r}
+# Realizo un control de calidad básico para quitar los datos con varianzas nulas 
+# Calculo la varianza de cada variable
+varianza_por_variable <- apply(assay(se), 1, var)
+# Filtro variables con baja varianza (esto lo he hecho porque sino me daba error, me cogía valores con varianza 0 y no me dejaba seguir)
+datos_filtrados <- assay(se)[varianza_por_variable > 0, ]
+```
+
+```{r}
+# Calculo la distancia entre muestras y aplicar clustering
+dist_matrix <- dist(t(datos_filtrados))
+hclust_results <- hclust(dist_matrix, method = "ward.D2")
+plot(hclust_results, labels = colData(se)$SURGERY, main = "Dendrograma clúster jerárquico")
+# Este clustering jerárquico lo hago para ver cómo se distribuyen las muestras
+```
+```{r}
+top_variables <- sort(varianza_por_variable, decreasing = TRUE)[1:10]
+barplot(top_variables, las = 2, main = "Variables con mayor varianza")
+```
+
+```{r}
+# Convierto data_matrix a matriz numérica porqeu hay variables que son tipo int y sino no se pueden usar para el PCA
+#data_matrix <- as.data.frame(lapply(data_matrix, as.numeric))
+
+# Imputar valores NA con ceros
+#data_matrix[is.na(data_matrix)] <- 0
+
+# Eliminar columnas con varianza cero después de imputar o filtrar valores NA
+#data_matrix <- data_matrix[, apply(data_matrix, 2, var) != 0]
+
+# Realizar el PCA
+#pca <- prcomp(data_matrix, scale. = TRUE)
+
+# Crear un data frame para los resultados del PCA y añadir SURGERY como grupo
+#pca_data <- data.frame(pca$x, SURGERY = factor(data$SURGERY))
+
+# Graficar el PCA
+#library(ggplot2)
+#ggplot(pca_data, aes(PC1, PC2, color = SURGERY)) +
+#    geom_point(size = 3) +
+#    labs(title = "PCA de los Datos", x = "PC1", y = "PC2") +
+#    theme_minimal()
+```
+
